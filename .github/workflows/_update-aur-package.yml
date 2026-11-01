@@ -46,19 +46,20 @@ jobs:
           PKGBASE: ${{ inputs.pkgbase }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          chown -R builder:builder "$GITHUB_WORKSPACE" "$RUNNER_TEMP"
-          runuser -u builder -- python automation/package.py prepare "$PKGBASE" --workdir "$RUNNER_TEMP/build"
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          # Forward builder's result without changing ownership of runner metadata.
+          runuser -u builder -- env -u GITHUB_OUTPUT python automation/package.py prepare "$PKGBASE" --workdir /home/builder/build | tee -a "$GITHUB_OUTPUT"
       - name: Build, lint, install, and check the package
         if: steps.prepare.outputs.needs_publish == 'true'
         env:
           PKGBASE: ${{ inputs.pkgbase }}
-        run: runuser -u builder -- bash automation/validate.sh "$PKGBASE" "$RUNNER_TEMP/build"
+        run: runuser -u builder -- bash automation/validate.sh "$PKGBASE" /home/builder/build
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         id: upload
         if: steps.prepare.outputs.needs_publish == 'true'
         with:
           name: package-${{ inputs.pkgbase }}
-          path: ${{ runner.temp }}/build/recipe.tar
+          path: /home/builder/build/recipe.tar
           if-no-files-found: error
           retention-days: 14
 
