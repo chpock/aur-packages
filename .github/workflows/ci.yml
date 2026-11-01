@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: archlinux:base-devel
+    steps:
+      - name: Install test tools
+        run: pacman -Syu --noconfirm --needed git python python-coverage nvchecker pyalpm pacman-contrib namcap aurpublish actionlint shellcheck
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint workflows and shell scripts
+        run: |
+          # GitHub supports queue: max; actionlint 1.7.12 does not recognize this key yet.
+          actionlint -ignore '^unexpected key "queue" for "concurrency" section\.'
+          shellcheck automation/validate.sh
+      - name: Run behavioral and local Git publication tests without credentials
+        shell: bash
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- python -m coverage run --branch --source=automation -m unittest discover -s tests -v
+          runuser -u builder -- python -m coverage report

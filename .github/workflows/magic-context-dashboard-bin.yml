@@ -1,0 +1,39 @@
+name: magic-context-dashboard-bin
+
+on:
+  schedule:
+    - cron: '37 6 * * *'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the validated package to GitHub and AUR
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - 'magic-context-dashboard-bin/**'
+      - 'automation/package.py'
+      - 'automation/validate.sh'
+      - 'automation/aur_known_hosts'
+      - 'automation/packages/magic-context-dashboard-bin/**'
+      - '.github/workflows/_update-aur-package.yml'
+      - '.github/workflows/magic-context-dashboard-bin.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aur-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/_update-aur-package.yml
+    with:
+      pkgbase: magic-context-dashboard-bin
+      publish: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
+    secrets:
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
