@@ -122,7 +122,10 @@ def prepare(repo, pkgbase, workdir, aur_url=None):
         comparison.check_returncode()
     if comparison.returncode == 1:
         return True
-    git(repo, "fetch", "--no-tags", aur_url or f"https://aur.archlinux.org/{pkgbase}.git", "master")
+    remote = aur_url or f"https://aur.archlinux.org/{pkgbase}.git"
+    if not git(repo, "ls-remote", "--heads", remote, "refs/heads/master"):
+        return True
+    git(repo, "fetch", "--no-tags", remote, "master")
     return git(repo, "rev-parse", "FETCH_HEAD^{tree}") != git(repo, "rev-parse", f"HEAD:{pkgbase}")
 
 

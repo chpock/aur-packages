@@ -1,0 +1,7 @@
+[repowise]
+source = "github"
+github = "repowise-dev/repowise"
+use_max_release = true
+include_regex = 'v[0-9]+\.[0-9]+\.[0-9]+'
+prefix = "v"
+sort_version_key = "vercmp"
