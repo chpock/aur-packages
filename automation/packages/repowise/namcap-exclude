@@ -1,0 +1,6 @@
+# pydepends resolves imports using global site-packages and pacman ownership,
+# not this package's isolated runtime. check.py instead requires uv pip check
+# against the complete extracted environment and runs application smoke tests.
+# Optional library test/build/integration helpers are not application dependencies.
+# Remove this exception when namcap can analyze archived private environments.
+pydepends

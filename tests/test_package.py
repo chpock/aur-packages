@@ -164,6 +164,40 @@ class PublicationTests(PackageFixture):
         self.assertEqual(git(self.origin, "rev-parse", "main"), canonical)
         self.assertFalse(self.prepare())
 
+    def test_initial_publication_to_an_empty_aur_repository(self):
+        shutil.rmtree(self.aur)
+        git(self.root, "init", "--bare", self.aur)
+        self.repo = self.root / "new-repo"
+        self.repo.mkdir()
+        git(self.repo, "init", "-b", "main")
+        self.identity(self.repo)
+        shutil.copytree(self.build / "demo", self.repo / "demo")
+        configuration = self.repo / "automation/packages/demo"
+        configuration.mkdir(parents=True)
+        (configuration / "nvchecker.toml").write_text(
+            '[demo]\nsource = "cmd"\ncmd = "printf 1.0"\n')
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "add new package without AUR history")
+        self.origin = self.root / "new-origin.git"
+        git(self.root, "clone", "--bare", self.repo, self.origin)
+        git(self.repo, "remote", "add", "origin", self.origin)
+        self.build = self.root / "new-checkout"
+        git(self.root, "clone", self.origin, self.build)
+        self.assertTrue(self.prepare())
+        canonical = git(self.origin, "rev-parse", "main")
+        self.publish()
+        self.assertEqual(git(self.origin, "rev-parse", "main"), canonical)
+        self.assertEqual(git(self.aur, "rev-parse", "master^{tree}"),
+                         git(self.origin, "rev-parse", "main:demo"))
+        self.assertFalse(self.prepare())
+
+    def test_missing_aur_repository_is_not_treated_as_unpublished(self):
+        (self.build / "automation/packages/demo/nvchecker.toml").write_text(
+            '[demo]\nsource = "cmd"\ncmd = "printf 1.0"\n')
+        with self.assertRaises(subprocess.CalledProcessError):
+            package.prepare(self.build, "demo", self.work, str(self.root / "missing.git"))
+        self.assertFalse(self.archive.exists())
+
     def test_aur_already_at_new_version_does_not_hide_pending_github_update(self):
         self.prepare()
         for name in ("PKGBUILD", ".SRCINFO"):
@@ -375,6 +409,63 @@ class ValidationTests(PackageFixture):
 
     def test_namcap_errors_block_installation_even_with_zero_exit_status(self):
         self.prepare()
+        recipe = self.recipe / "PKGBUILD"
+        recipe.write_text(recipe.read_text().replace("license=('GPL-3.0-or-later')", "license=('MIT')"))
+        (self.recipe / ".SRCINFO").write_text(package.run(["makepkg", "--printsrcinfo"], self.recipe) + "\n")
+        result = self.validate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(" E: ", result.stdout)
+        self.assertFalse(self.log.exists())
+
+    def test_namcap_recipe_errors_with_spaced_labels_block_installation(self):
+        self.prepare()
+        namcap = self.tools / "namcap"
+        namcap.write_text("#!/bin/bash\necho 'PKGBUILD (demo) E: fixture recipe rejected'\n")
+        namcap.chmod(0o755)
+        result = self.validate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.log.exists())
+
+    def namcap_exclusion(self, rules="pydepends\n", checker=True):
+        configuration = self.build / "automation/packages/demo"
+        (configuration / "namcap-exclude").write_text("# Private runtime policy\n" + rules)
+        if checker:
+            (configuration / "check.py").write_text("print('replacement archive check passed')\n")
+
+    def test_private_python_imports_use_the_replacement_check(self):
+        self.prepare()
+        recipe = self.recipe / "PKGBUILD"
+        recipe.write_text(recipe.read_text().replace(
+            '"$pkgdir/usr/share/demo/payload"', '"$pkgdir/usr/share/demo/payload.py"'))
+        (self.recipe / "payload").write_text("import packaging\n")
+        package.run(["updpkgsums"], self.recipe)
+        (self.recipe / ".SRCINFO").write_text(package.run(["makepkg", "--printsrcinfo"], self.recipe) + "\n")
+        self.namcap_exclusion()
+        result = self.validate()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("pydepends", result.stdout)
+        self.assertIn("replacement archive check passed", result.stdout)
+        self.assertEqual(self.log.read_text(), "install\ncheck\n")
+
+    def test_namcap_exclusion_requires_a_replacement_check(self):
+        self.prepare()
+        self.namcap_exclusion(checker=False)
+        result = self.validate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.log.exists())
+
+    def test_namcap_exclusion_cannot_disable_other_rules(self):
+        for rules in ("elfpaths\n", "pydepends\nelfpaths\n", ""):
+            with self.subTest(rules=rules):
+                self.prepare()
+                self.namcap_exclusion(rules)
+                result = self.validate()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(self.log.exists())
+
+    def test_namcap_other_errors_remain_fatal_with_a_replacement_check(self):
+        self.prepare()
+        self.namcap_exclusion()
         recipe = self.recipe / "PKGBUILD"
         recipe.write_text(recipe.read_text().replace("license=('GPL-3.0-or-later')", "license=('MIT')"))
         (self.recipe / ".SRCINFO").write_text(package.run(["makepkg", "--printsrcinfo"], self.recipe) + "\n")

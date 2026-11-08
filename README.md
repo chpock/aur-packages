@@ -12,6 +12,7 @@ maintains their Arch Linux packaging, not the applications themselves.
 | Package | Upstream project | Recipe |
 | --- | --- | --- |
 | [magic-context-dashboard-bin](https://aur.archlinux.org/packages/magic-context-dashboard-bin) | [Magic Context Dashboard](https://github.com/cortexkit/magic-context) | [PKGBUILD](magic-context-dashboard-bin/PKGBUILD) |
+| repowise | [Repowise](https://github.com/repowise-dev/repowise) | [PKGBUILD](repowise/PKGBUILD) |
 
 ## Automated updates
 
