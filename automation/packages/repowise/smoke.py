@@ -29,6 +29,18 @@ class DistributionRuntimeTests(unittest.TestCase):
         self.assertEqual((sparse.eye(2) @ numpy.array([3, 4])).tolist(), [3, 4])
         self.assertTrue(callable(LanceDBVectorStore))
 
+    def test_embedding_failure_recommends_aur_repair_only_for_lancedb(self):
+        from repowise.cli.providers.vector_store import embed_failure_message
+
+        message = embed_failure_message('fastembed', 1)
+        self.assertIsNotNone(message)
+        self.assertNotIn('pip install', message)
+        self.assertRegex(
+            message,
+            r'(?i)\brepowise reindex\.\s+only when that warning names LanceDB as missing or broken:\s+'
+            r'reinstall the repowise AUR package\b',
+        )
+
     def test_scipy_special_and_linear_algebra_execute(self):
         from scipy import linalg
         from scipy.special import cython_special
